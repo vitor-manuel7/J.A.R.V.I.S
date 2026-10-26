@@ -1,0 +1,6 @@
+{
+  "name": "J.A.R.V.I.S. AI - Stark Protocol",
+  "description": "Assistente de inteligência artificial futurista J.A.R.V.I.S. com comando de voz, respostas faladas em português brasileiro, interface holográfica dark neon e protocolos modulares.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
