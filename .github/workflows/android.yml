@@ -38,7 +38,7 @@ jobs:
       - name: Validar e Localizar Arquivo APK Gerado
         id: find_apk
         run: |
-          APK_PATH=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          APK_PATH=$(find . -name "*debug*.apk" | head -n 1)
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
             echo "::error::Arquivo APK não foi localizado após o término do Gradle assembleDebug."
             exit 1

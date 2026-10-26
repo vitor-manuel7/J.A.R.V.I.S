@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Cybernetic Quantum Ring -->
+    <path
+        android:strokeColor="#00F0FF"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000"
+        android:pathData="M54,18 A36,36 0 1,0 54,90 A36,36 0 1,0 54,18 Z" />
+    <!-- Segmented Gyro Ring (Violet) -->
+    <path
+        android:strokeColor="#A855F7"
+        android:strokeWidth="3.5"
+        android:fillColor="#00000000"
+        android:pathData="M54,26 A28,28 0 1,0 54,82 A28,28 0 1,0 54,26 Z" />
+    <!-- Hexagonal Geometric Core Nodes -->
+    <path
+        android:strokeColor="#00F0FF"
+        android:strokeWidth="1.5"
+        android:fillColor="#1500F0FF"
+        android:pathData="M54,34 L69,43 L69,61 L54,70 L39,61 L39,43 Z" />
+    <!-- Central Singularity Glow -->
+    <path
+        android:fillColor="#00F0FF"
+        android:pathData="M54,45 A9,9 0 1,0 54,63 A9,9 0 1,0 54,45 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,50 A4,4 0 1,0 54,58 A4,4 0 1,0 54,50 Z" />
+</vector>
