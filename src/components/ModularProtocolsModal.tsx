@@ -33,6 +33,11 @@ import {
   executeAuthorizedAction,
   AutomationExecutionResult,
 } from '../utils/androidAutomation';
+import {
+  isRunningInNativeApp,
+  checkNativeAccessibilityStatus,
+  checkNativeNotificationStatus,
+} from '../utils/androidBridge';
 
 interface ModularProtocolsModalProps {
   isOpen: boolean;
@@ -306,28 +311,31 @@ export const ModularProtocolsModal: React.FC<ModularProtocolsModalProps> = ({
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono pt-1 text-slate-300">
                   <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                    <span className="text-slate-500 block">SO Android:</span>
-                    <span className={deviceCaps?.isAndroid ? 'text-emerald-400 font-bold' : 'text-slate-400'}>
-                      {deviceCaps?.isAndroid ? 'Sim (Nativo/Mobile)' : 'Não (Desktop/Web)'}
+                    <span className="text-slate-500 block">Modo Execução:</span>
+                    <span className={isRunningInNativeApp() ? 'text-cyan-400 font-bold' : 'text-slate-300'}>
+                      {isRunningInNativeApp() ? 'APK Nativo (Bridge Ativa)' : 'Navegador Web / PWA'}
                     </span>
                   </div>
                   <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
-                    <span className="text-slate-500 block">Modo Standalone:</span>
-                    <span className={deviceCaps?.isStandalonePWA ? 'text-emerald-400 font-bold' : 'text-slate-400'}>
-                      {deviceCaps?.isStandalonePWA ? 'PWA Instalado' : 'Aba de Navegador'}
+                    <span className="text-slate-500 block">Acessibilidade:</span>
+                    <span className={checkNativeAccessibilityStatus() ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                      {checkNativeAccessibilityStatus() ? 'Conectado (Controle UI)' : 'Inativo nas Definições'}
                     </span>
                   </div>
                   <div className="p-2 rounded bg-slate-950/60 border border-slate-800 col-span-2 sm:col-span-1">
-                    <span className="text-slate-500 block">Web Share API:</span>
-                    <span className={deviceCaps?.hasWebShare ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
-                      {deviceCaps?.hasWebShare ? 'Disponível' : 'Fallback Ativo'}
+                    <span className="text-slate-500 block">Notificações:</span>
+                    <span className={checkNativeNotificationStatus() ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                      {checkNativeNotificationStatus() ? 'Acesso Concedido' : 'Pendente no Android'}
                     </span>
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  As automações utilizam protocolos seguros de Deep Links e Web Intents do Android (ex: <code className="text-cyan-300">whatsapp://</code>, <code className="text-cyan-300">tel:</code>, <code className="text-cyan-300">geo:</code>). Nenhuma ação oculta ou não autorizada é executada.
-                </p>
+                <div className="p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-500/20 text-[11px] text-slate-300 leading-relaxed space-y-1">
+                  <div className="font-bold text-cyan-300">Como ativar os recursos nativos no Android:</div>
+                  <div>• <b>Acessibilidade por voz:</b> Vá em <i>Configurações do Android &gt; Acessibilidade &gt; J.A.R.V.I.S. Controle por Voz</i> e ative.</div>
+                  <div>• <b>Leitura de Notificações:</b> Vá em <i>Configurações &gt; Apps e Notificações &gt; Acesso a Notificações &gt; J.A.R.V.I.S.</i> e autorize.</div>
+                  <div>• <b>Palavra de ativação contínua:</b> Diga <i>\"Jarvis\"</i> ou ative no botão <b>ESCUTA: JARVIS</b> no topo da tela.</div>
+                </div>
               </div>
 
               {/* Execution Feedback Notification */}
@@ -598,6 +606,37 @@ export const ModularProtocolsModal: React.FC<ModularProtocolsModalProps> = ({
           {/* TAB 6: VOICE & SPEECH CONFIG */}
           {activeTab === 'voice' && (
             <div className="space-y-4">
+              {/* Wake Word "Jarvis" Section */}
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-cyan-400/40 space-y-2 glow-cyan">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-mono font-bold text-white flex items-center gap-2">
+                      <span>PALAVRA DE ATIVAÇÃO: \"JARVIS\"</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-semibold ${
+                        telemetry.wakeWordEnabled
+                          ? 'bg-cyan-400 text-black shadow-[0_0_8px_#00f0ff]'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {telemetry.wakeWordEnabled ? 'ESCUTA ATIVA' : 'MODO MANUAL'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-300 mt-1">
+                      Quando ativado, basta falar \"Jarvis\" para acionar o assistente. O Jarvis silencia a detecção enquanto responde para não reconhecer a própria fala.
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onUpdateTelemetry({ wakeWordEnabled: !telemetry.wakeWordEnabled })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                      telemetry.wakeWordEnabled
+                        ? 'bg-cyan-400 text-black shadow-[0_0_12px_#00f0ff]'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {telemetry.wakeWordEnabled ? 'LIGADO' : 'DESLIGADO'}
+                  </button>
+                </div>
+              </div>
+
               <div className="p-4 rounded-xl bg-slate-900/70 border border-cyan-500/30 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>

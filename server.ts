@@ -37,6 +37,150 @@ DIRETRIZES DE PERSONALIDADE E COMPORTAMENTO:
 4. Identidade Cibernética: Integre referências a diagnósticos de telemetria neural, integridade do núcleo quântico, automações de dispositivo e protocolos de segurança cibernética quando cabível.
 5. Se for acionado um comando do sistema ou automação (ex: status dos sistemas, modo combate, alarme, clima, WhatsApp, discador), confirme a execução com postura tática exemplar.`;
 
+interface AnalyzedGeminiError {
+  status: number;
+  code: string;
+  message: string;
+  userExplanation: string;
+  diagnosticDetail: string;
+  retryAfterSeconds?: number;
+}
+
+function analyzeGeminiError(err: any): AnalyzedGeminiError {
+  let status = err?.status || err?.statusCode || 500;
+  let code = "";
+  let rawMsg = String(err?.message || err || "");
+  let reason = "";
+
+  // Attempt to parse JSON error structure from Google API
+  try {
+    const jsonMatch = rawMsg.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.error) {
+        status = Number(parsed.error.code) || status;
+        code = parsed.error.status || "";
+        rawMsg = parsed.error.message || rawMsg;
+        if (Array.isArray(parsed.error.details) && parsed.error.details[0]) {
+          reason = parsed.error.details[0].reason || "";
+        }
+      }
+    }
+  } catch (_) {}
+
+  const lowerMsg = rawMsg.toLowerCase();
+
+  // 1. Quota / Rate limit (429 / RESOURCE_EXHAUSTED)
+  if (
+    status === 429 ||
+    code === "RESOURCE_EXHAUSTED" ||
+    lowerMsg.includes("quota exceeded") ||
+    lowerMsg.includes("rate limit") ||
+    reason === "RESOURCE_EXHAUSTED"
+  ) {
+    let retryAfterSeconds: number | undefined;
+    const retryMatch = rawMsg.match(/retry(?: after| in)?\s+([0-9]+(?:\.[0-9]+)?)\s*s/i);
+    if (retryMatch && retryMatch[1]) {
+      retryAfterSeconds = Math.ceil(parseFloat(retryMatch[1]));
+    }
+    return {
+      status: 429,
+      code: "RESOURCE_EXHAUSTED",
+      message: rawMsg,
+      userExplanation: `Patrão, os servidores neurais atingiram temporariamente o limite de cota da API Gemini (Erro 429: limite de requisições excedido).${
+        retryAfterSeconds
+          ? ` Previsão de liberação em aproximadamente ${retryAfterSeconds} segundos.`
+          : ' Sugiro aguardar cerca de um minuto antes de enviar uma nova pergunta.'
+      } Os comandos locais do sistema permanecem operacionais.`,
+      diagnosticDetail: `Erro 429: Limite de cota atingido.${retryAfterSeconds ? ` Tente novamente em ${retryAfterSeconds}s.` : ''}`,
+      retryAfterSeconds,
+    };
+  }
+
+  // 2. Authentication failure (401 / UNAUTHENTICATED / API key not valid)
+  if (
+    status === 401 ||
+    code === "UNAUTHENTICATED" ||
+    reason === "ACCESS_TOKEN_TYPE_UNSUPPORTED" ||
+    reason === "API_KEY_INVALID" ||
+    lowerMsg.includes("api key not valid") ||
+    lowerMsg.includes("unauthenticated")
+  ) {
+    return {
+      status: 401,
+      code: "UNAUTHENTICATED",
+      message: rawMsg,
+      userExplanation: `Patrão, detectei uma falha de autenticação (Erro 401) com a chave de API do Gemini no servidor. A chave configurada não foi aceita pela API do Google (${
+        reason || 'chave inválida ou não autorizada'
+      }). Por favor, configure uma chave GEMINI_API_KEY válida no painel de Segredos (Settings > Secrets).`,
+      diagnosticDetail: `Erro 401: Chave de API inválida ou não autorizada (${reason || 'UNAUTHENTICATED'}).`,
+    };
+  }
+
+  // 3. Permission denied (403 / PERMISSION_DENIED)
+  if (
+    status === 403 ||
+    code === "PERMISSION_DENIED" ||
+    lowerMsg.includes("permission denied") ||
+    lowerMsg.includes("api not enabled")
+  ) {
+    return {
+      status: 403,
+      code: "PERMISSION_DENIED",
+      message: rawMsg,
+      userExplanation: `Patrão, o acesso aos servidores neurais foi recusado (Erro 403: permissão negada). Por favor, verifique se a Generative Language API está habilitada no projeto Google Cloud vinculado à sua chave de API.`,
+      diagnosticDetail: `Erro 403: Permissão negada no Google Cloud.`,
+    };
+  }
+
+  // 4. Model not found (404 / NOT_FOUND)
+  if (status === 404 || code === "NOT_FOUND" || lowerMsg.includes("not found")) {
+    return {
+      status: 404,
+      code: "NOT_FOUND",
+      message: rawMsg,
+      userExplanation: `Patrão, o modelo neural solicitado não foi localizado no catálogo da API Gemini (Erro 404).`,
+      diagnosticDetail: `Erro 404: Modelo neural não encontrado.`,
+    };
+  }
+
+  // 5. Bad request / Invalid argument / Safety block (400 / INVALID_ARGUMENT)
+  if (status === 400 || code === "INVALID_ARGUMENT") {
+    return {
+      status: 400,
+      code: "INVALID_ARGUMENT",
+      message: rawMsg,
+      userExplanation: `Patrão, a solicitação foi recusada pelos filtros da API Gemini (Erro 400: parâmetros inválidos ou bloqueio de segurança).`,
+      diagnosticDetail: `Erro 400: Parâmetros inválidos ou filtro de conteúdo.`,
+    };
+  }
+
+  // 6. Network / Socket errors
+  if (
+    lowerMsg.includes("econnreset") ||
+    lowerMsg.includes("etimedout") ||
+    lowerMsg.includes("enotfound") ||
+    lowerMsg.includes("fetch failed")
+  ) {
+    return {
+      status: 503,
+      code: "NETWORK_ERROR",
+      message: rawMsg,
+      userExplanation: `Patrão, ocorreu uma interrupção na conexão de rede com os servidores do Gemini (Erro 503). Por favor, verifique sua conexão com a internet e tente novamente.`,
+      diagnosticDetail: `Erro 503: Conexão interrompida com servidores neurais.`,
+    };
+  }
+
+  // 7. General / Server error
+  return {
+    status: status >= 400 && status < 600 ? status : 500,
+    code: code || "COMMUNICATION_ERROR",
+    message: rawMsg,
+    userExplanation: `Patrão, ocorreu uma instabilidade na comunicação neural com o Gemini (Erro ${status}: ${rawMsg.slice(0, 100)}). Os protocolos locais continuam à sua disposição.`,
+    diagnosticDetail: `Erro ${status}: ${rawMsg.slice(0, 80)}`,
+  };
+}
+
 // Health check endpoint
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -45,6 +189,42 @@ app.get("/api/health", (_req, res) => {
     timestamp: new Date().toISOString(),
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
   });
+});
+
+// Neural diagnostics endpoint to test Gemini connectivity and credentials
+app.get("/api/neural-status", async (_req, res) => {
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(500).json({
+      connected: false,
+      status: 500,
+      code: "MISSING_KEY",
+      diagnostic: "Chave GEMINI_API_KEY ausente no servidor.",
+      message: "Patrão, nenhuma chave GEMINI_API_KEY foi encontrada no ambiente do servidor.",
+    });
+  }
+
+  try {
+    const testRes = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: "ping",
+    });
+    return res.json({
+      connected: true,
+      status: 200,
+      model: "gemini-2.5-flash",
+      reply: testRes?.text?.slice(0, 60) || "ok",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    const analyzed = analyzeGeminiError(err);
+    return res.status(analyzed.status).json({
+      connected: false,
+      status: analyzed.status,
+      code: analyzed.code,
+      diagnostic: analyzed.diagnosticDetail,
+      message: analyzed.userExplanation,
+    });
+  }
 });
 
 // Chat completion endpoint
@@ -58,7 +238,9 @@ app.post("/api/chat", async (req, res) => {
 
     if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({
-        error: "Chave GEMINI_API_KEY não configurada no servidor. Por favor, verifique as variáveis de ambiente.",
+        error: "Patrão, a chave GEMINI_API_KEY não está configurada no servidor. Por favor, verifique as variáveis de ambiente no painel de segredos.",
+        diagnostic: "Chave GEMINI_API_KEY ausente no servidor (500)",
+        code: "MISSING_KEY",
       });
     }
 
@@ -84,18 +266,15 @@ app.post("/api/chat", async (req, res) => {
       parts: [{ text: message }],
     });
 
-    // Candidate models prioritized by real API availability, quota limits, and responsiveness
+    // Valid candidate models prioritized by availability and responsiveness
     const modelsToTry = [
-      "gemini-3.5-flash-lite",
-      "gemini-flash-lite-latest",
+      "gemini-2.5-flash",
       "gemini-3.1-flash-lite",
-      "gemini-3.5-flash",
+      "gemini-flash-latest",
+      "gemini-3.8-flash",
     ];
     let response: any = null;
     let lastError: any = null;
-    let isQuotaError = false;
-    let retryAfterSeconds: number | null = null;
-    let isNetworkError = false;
 
     for (const model of modelsToTry) {
       try {
@@ -113,35 +292,18 @@ app.post("/api/chat", async (req, res) => {
       } catch (err: any) {
         lastError = err;
         const errMsg = String(err?.message || err);
-        const errStatus = err?.status || err?.statusCode;
+        console.warn(`Tentativa com modelo ${model} falhou:`, errMsg);
 
-        console.warn(`Tentativa com ${model} falhou:`, errMsg);
+        const analyzed = analyzeGeminiError(err);
 
-        // Check for Quota / Rate limit (HTTP 429 / RESOURCE_EXHAUSTED)
-        if (
-          errStatus === 429 ||
-          errMsg.includes("429") ||
-          errMsg.includes("RESOURCE_EXHAUSTED") ||
-          errMsg.toLowerCase().includes("quota exceeded") ||
-          errMsg.toLowerCase().includes("rate limit")
-        ) {
-          isQuotaError = true;
-          // Extract retry delay if provided by the API (e.g. "retry after 30s" or "in 45.2s")
-          const retryMatch = errMsg.match(/retry(?: after| in)?\s+([0-9]+(?:\.[0-9]+)?)\s*s/i);
-          if (retryMatch && retryMatch[1]) {
-            retryAfterSeconds = Math.ceil(parseFloat(retryMatch[1]));
-          }
+        // If error is fatal for the API key (401 invalid key, 403 forbidden),
+        // other models will suffer the exact same rejection. Break immediately.
+        if (analyzed.status === 401 || analyzed.status === 403) {
+          break;
         }
 
-        // Check for network connection errors
-        if (
-          errMsg.includes("ECONNRESET") ||
-          errMsg.includes("ETIMEDOUT") ||
-          errMsg.includes("ENOTFOUND") ||
-          errMsg.toLowerCase().includes("fetch failed")
-        ) {
-          isNetworkError = true;
-          // Brief pause before trying next fallback model to allow socket recovery
+        // Brief pause before trying next fallback model to allow socket recovery on network glitches
+        if (analyzed.status === 503 || analyzed.code === "NETWORK_ERROR") {
           await new Promise((res) => setTimeout(res, 250));
         }
       }
@@ -165,35 +327,23 @@ app.post("/api/chat", async (req, res) => {
     }
 
     console.error("Todos os modelos candidatos falharam:", lastError);
+    const analyzed = analyzeGeminiError(lastError);
 
-    if (isQuotaError) {
-      let quotaMessage = "Patrão, os servidores neurais atingiram temporariamente o limite de cota gratuita da API Gemini (Erro 429: limite de requisições excedido).";
-      if (retryAfterSeconds) {
-        quotaMessage += ` O sistema estima que uma nova requisição poderá ser tentada em aproximadamente ${retryAfterSeconds} segundos.`;
-      } else {
-        quotaMessage += " Sugiro aguardar alguns instantes antes de enviar um novo comando neural. Todos os comandos locais de telemetria, defesa e cronômetros continuam ativos.";
-      }
-
-      return res.status(429).json({
-        error: quotaMessage,
-        quotaExceeded: true,
-        retryAfter: retryAfterSeconds,
-      });
-    }
-
-    if (isNetworkError) {
-      return res.status(503).json({
-        error: "Patrão, ocorreu uma interrupção na conexão com os servidores neurais. Por favor, verifique a estabilidade de rede e tente novamente em instantes.",
-      });
-    }
-
-    return res.status(500).json({
-      error: "Patrão, houve uma instabilidade momentânea na comunicação neural com o Gemini. Os protocolos locais permanecem à sua disposição; por favor, tente novamente.",
+    return res.status(analyzed.status).json({
+      error: analyzed.userExplanation,
+      diagnostic: analyzed.diagnosticDetail,
+      code: analyzed.code,
+      status: analyzed.status,
+      retryAfter: analyzed.retryAfterSeconds,
     });
   } catch (error: any) {
-    console.error("Erro ao chamar o modelo Gemini:", error);
-    return res.status(500).json({
-      error: error?.message || "Falha nos servidores neurais do J.A.R.V.I.S.",
+    console.error("Erro inesperado no endpoint /api/chat:", error);
+    const analyzed = analyzeGeminiError(error);
+    return res.status(analyzed.status).json({
+      error: analyzed.userExplanation,
+      diagnostic: analyzed.diagnosticDetail,
+      code: analyzed.code,
+      status: analyzed.status,
     });
   }
 });

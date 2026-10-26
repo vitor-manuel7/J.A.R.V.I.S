@@ -1,0 +1,8 @@
+<resources>
+    <color name="cyber_bg">#07080E</color>
+    <color name="cyber_surface">#0F111E</color>
+    <color name="cyan_accent">#00F0FF</color>
+    <color name="violet_accent">#A855F7</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+</resources>

@@ -9,6 +9,7 @@ interface HudHeaderProps {
   onStopSpeaking: () => void;
   onToggleMute: () => void;
   onToggleAutoSpeak: () => void;
+  onToggleWakeWord: () => void;
   onOpenProtocols: () => void;
   onOpenMicHelp: () => void;
   micPermissionState: 'granted' | 'denied' | 'prompt' | 'unknown';
@@ -20,6 +21,7 @@ export const HudHeader: React.FC<HudHeaderProps> = ({
   onStopSpeaking,
   onToggleMute,
   onToggleAutoSpeak,
+  onToggleWakeWord,
   onOpenProtocols,
   onOpenMicHelp,
   micPermissionState,
@@ -162,6 +164,27 @@ export const HudHeader: React.FC<HudHeaderProps> = ({
           >
             <span className="text-[10px] text-slate-400">VOZ:</span>
             <span className="font-bold">{telemetry.voiceAutoSpeak ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* Wake Word "Jarvis" Continuous Mode Toggle */}
+          <button
+            onClick={() => {
+              playTechClick(telemetry.audioMuted);
+              onToggleWakeWord();
+            }}
+            className={`min-h-[44px] px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-colors flex items-center justify-center gap-1 cursor-pointer ${
+              telemetry.wakeWordEnabled
+                ? 'border-cyan-400 bg-cyan-950/70 text-cyan-200 shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                : 'border-slate-800 bg-slate-900 text-slate-400'
+            }`}
+            title={
+              telemetry.wakeWordEnabled
+                ? "Escuta contínua ativada: diga 'Jarvis' a qualquer momento para comandar"
+                : "Escuta contínua inativa: clique para ativar palavra de ativação 'Jarvis'"
+            }
+          >
+            <span className="text-[10px] text-slate-400 hidden xs:inline">ESCUTA:</span>
+            <span className="font-bold">{telemetry.wakeWordEnabled ? 'JARVIS' : 'MANUAL'}</span>
           </button>
 
           {/* Protocols & Settings Modal trigger */}

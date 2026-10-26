@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">J.A.R.V.I.S.</string>
+    <string name="accessibility_service_label">J.A.R.V.I.S. Controle por Voz</string>
+    <string name="accessibility_service_desc">Permite que o assistente pessoal J.A.R.V.I.S. execute ações assistivas autorizadas na interface por voz (como clicar em botões especificados e navegar entre telas). O serviço opera estritamente sob comando explícito do usuário e respeita todos os bloqueios de segurança do sistema.</string>
+    <string name="notification_service_label">J.A.R.V.I.S. Notificações</string>
+    <string name="notification_service_desc">Permite que o J.A.R.V.I.S. leia em voz alta suas notificações recentes quando solicitado explicitamente por comando de voz.</string>
+    <string name="channel_name">J.A.R.V.I.S. Serviço Neural</string>
+    <string name="channel_desc">Notificações operacionais do assistente J.A.R.V.I.S.</string>
+</resources>

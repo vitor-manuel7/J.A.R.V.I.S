@@ -1,0 +1,55 @@
+name: Build J.A.R.V.I.S. Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compilar APK Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar Código Fonte (Checkout)
+        uses: actions/checkout@v4
+
+      - name: Configurar Ambiente Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Conceder Permissão de Execução ao Gradle Wrapper
+        working-directory: ./android
+        run: chmod +x gradlew
+
+      - name: Compilar APK de Depuração (Debug APK)
+        working-directory: ./android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Validar e Localizar Arquivo APK Gerado
+        id: find_apk
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "::error::Arquivo APK não foi localizado após o término do Gradle assembleDebug."
+            exit 1
+          fi
+          echo "APK gerado com sucesso em: $APK_PATH"
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+
+      - name: Publicar APK como Artefato de Download
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-CyberProtocol-Debug-APK
+          path: ${{ steps.find_apk.outputs.apk_path }}
+          retention-days: 14
+          if-no-files-found: error

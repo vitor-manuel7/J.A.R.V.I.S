@@ -24,6 +24,8 @@ export interface TelemetryState {
   speechPitch: number;
   selectedVoiceUri: string;
   isOnline: boolean;
+  wakeWordEnabled: boolean;
+  wakeWordActive: boolean;
 }
 
 export interface TacticalLog {

@@ -37,6 +37,7 @@ import { evaluateStarkCommand } from './utils/commandSystem';
 import { HudHeader } from './components/HudHeader';
 import { ArcReactor } from './components/ArcReactor';
 import { SystemTelemetryBar } from './components/SystemTelemetryBar';
+import { JarvisWakeWordEngine } from './utils/wakeWord';
 import { ChatInterface } from './components/ChatInterface';
 import { VoiceInputBar } from './components/VoiceInputBar';
 import { VoiceTranscriptOverlay } from './components/VoiceTranscriptOverlay';
@@ -57,6 +58,8 @@ export default function App() {
     speechPitch: 0.92, // Frequência rebaixada para voz masculina firme e grave
     selectedVoiceUri: '',
     isOnline: true,
+    wakeWordEnabled: false,
+    wakeWordActive: false,
   });
 
   // 2. Chat & Communication State
@@ -99,9 +102,61 @@ export default function App() {
 
   // Speech controller reference and deduplication guards
   const speechControllerRef = useRef<JarvisSpeechController | null>(null);
+  const wakeWordEngineRef = useRef<JarvisWakeWordEngine | null>(null);
   const isProcessingRef = useRef(false);
   const lastProcessedCommandRef = useRef<{ text: string; timestamp: number }>({ text: '', timestamp: 0 });
   const handleSendMessageRef = useRef<(text: string, isVoice?: boolean) => Promise<void>>(async () => {});
+
+  // Wake Word Engine lifecycle
+  useEffect(() => {
+    const engine = new JarvisWakeWordEngine({
+      onWakeWordDetected: (immediateCommand) => {
+        playCommandSuccessChime(telemetry.audioMuted);
+        if (immediateCommand && immediateCommand.trim()) {
+          handleSendMessageRef.current(immediateCommand.trim(), true);
+        } else {
+          // User said "Jarvis", engage microphone
+          if (speechControllerRef.current) {
+            speechControllerRef.current.startListening();
+          }
+        }
+      },
+      onListeningStateChange: (active) => {
+        setTelemetry((prev) => ({ ...prev, wakeWordActive: active }));
+      },
+      onError: (msg) => {
+        console.warn('[WakeWord Engine]', msg);
+      },
+    });
+
+    wakeWordEngineRef.current = engine;
+
+    if (telemetry.wakeWordEnabled) {
+      engine.start();
+    }
+
+    return () => {
+      engine.stop();
+    };
+  }, [telemetry.wakeWordEnabled, telemetry.audioMuted]);
+
+  // Synchronize TTS speech state with Wake Word engine to avoid self-triggering loops
+  useEffect(() => {
+    if (wakeWordEngineRef.current) {
+      wakeWordEngineRef.current.setSpeaking(isSpeaking);
+    }
+  }, [isSpeaking]);
+
+  // Pause wake word engine while user is actively recording a voice command
+  useEffect(() => {
+    if (wakeWordEngineRef.current && telemetry.wakeWordEnabled) {
+      if (isListening) {
+        wakeWordEngineRef.current.stop();
+      } else {
+        wakeWordEngineRef.current.start();
+      }
+    }
+  }, [isListening, telemetry.wakeWordEnabled]);
 
   // Check microphone permissions and initialize speech controller once on mount
   useEffect(() => {
@@ -376,7 +431,15 @@ export default function App() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Erro de resposta do servidor (${res.status})`);
+        let rawError = errorData.error;
+        if (typeof rawError === 'object' && rawError !== null) {
+          rawError = rawError.message || JSON.stringify(rawError);
+        }
+        const customErr = new Error(rawError || `Erro de resposta do servidor (${res.status})`);
+        (customErr as any).diagnostic = errorData.diagnostic || `Diagnóstico: Código HTTP ${res.status}`;
+        (customErr as any).code = errorData.code;
+        (customErr as any).statusCode = res.status;
+        throw customErr;
       }
 
       const data = await res.json();
@@ -401,8 +464,15 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Falha ao comunicar com J.A.R.V.I.S.:', err);
-      const errorMsg =
-        err?.message || 'Falha de transmissão com a matriz neural. Por favor, tente novamente.';
+      let errorMsg = err?.message;
+      if (typeof errorMsg === 'object' && errorMsg !== null) {
+        errorMsg = (errorMsg as any).message || JSON.stringify(errorMsg);
+      }
+      if (!errorMsg || errorMsg === '[object Object]') {
+        errorMsg = 'Falha de transmissão com a matriz neural. Por favor, tente novamente.';
+      }
+
+      const diagnosticTag = err?.diagnostic || (err?.statusCode ? `Erro ${err.statusCode}` : 'Diagnóstico Neural');
 
       const explanationText =
         errorMsg.toLowerCase().startsWith('patrão') || errorMsg.toLowerCase().startsWith('perdão')
@@ -416,7 +486,7 @@ export default function App() {
                 ...msg,
                 text: explanationText,
                 status: 'error',
-                errorMessage: errorMsg,
+                errorMessage: diagnosticTag,
               }
             : msg
         )
@@ -536,6 +606,9 @@ export default function App() {
         onToggleMute={() => setTelemetry((prev) => ({ ...prev, audioMuted: !prev.audioMuted }))}
         onToggleAutoSpeak={() =>
           setTelemetry((prev) => ({ ...prev, voiceAutoSpeak: !prev.voiceAutoSpeak }))
+        }
+        onToggleWakeWord={() =>
+          setTelemetry((prev) => ({ ...prev, wakeWordEnabled: !prev.wakeWordEnabled }))
         }
         onOpenProtocols={() => setIsProtocolsModalOpen(true)}
         onOpenMicHelp={() => setIsPermissionModalOpen(true)}

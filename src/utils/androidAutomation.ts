@@ -8,6 +8,13 @@
  * - Safe URL/Intent dispatch with transparent feedback (zero fake simulation)
  */
 
+import {
+  launchAndroidApp,
+  executeNativeNavigation,
+  executeAccessibilityClick,
+  readLatestNotifications,
+} from './androidBridge';
+
 export interface AndroidAutomationAction {
   id: string;
   name: string;
@@ -91,6 +98,51 @@ export const AUTHORIZED_AUTOMATION_ACTIONS: AndroidAutomationAction[] = [
     intentScheme: 'whatsapp://send?text=',
     requiresInput: true,
     inputPlaceholder: 'Mensagem ou número de telefone',
+  },
+  {
+    id: 'youtube',
+    name: 'YouTube',
+    description: 'Abre o aplicativo ou portal oficial do YouTube.',
+    category: 'system',
+    icon: 'Play',
+    intentScheme: 'vnd.youtube:',
+    requiresInput: false,
+  },
+  {
+    id: 'settings',
+    name: 'Definições / Configurações',
+    description: 'Abre o painel de configurações do sistema Android.',
+    category: 'system',
+    icon: 'Sliders',
+    intentScheme: 'android.settings:',
+    requiresInput: false,
+  },
+  {
+    id: 'home',
+    name: 'Tela Inicial (Home)',
+    description: 'Retorna à tela inicial do Android.',
+    category: 'system',
+    icon: 'Smartphone',
+    intentScheme: 'internal:home',
+    requiresInput: false,
+  },
+  {
+    id: 'back',
+    name: 'Voltar (Back)',
+    description: 'Executa a ação de voltar do sistema Android.',
+    category: 'system',
+    icon: 'ExternalLink',
+    intentScheme: 'internal:back',
+    requiresInput: false,
+  },
+  {
+    id: 'notifications',
+    name: 'Ler Notificações',
+    description: 'Lê o resumo das notificações recebidas no Android.',
+    category: 'system',
+    icon: 'MessageSquare',
+    intentScheme: 'internal:notifications',
+    requiresInput: false,
   },
   {
     id: 'phone',
@@ -316,6 +368,72 @@ export async function executeAuthorizedAction(
         }
       }
 
+      case 'youtube': {
+        const nativeRes = await launchAndroidApp('youtube');
+        return {
+          handled: true,
+          actionLabel: 'YouTube',
+          executedVia: nativeRes.isNative ? 'android_intent' : 'web_fallback',
+          openedExternalApp: true,
+          feedbackText: nativeRes.message,
+        };
+      }
+
+      case 'settings': {
+        const nativeRes = await launchAndroidApp('settings');
+        return {
+          handled: true,
+          actionLabel: 'Definições do Android',
+          executedVia: nativeRes.isNative ? 'android_intent' : 'internal_action',
+          openedExternalApp: nativeRes.success,
+          feedbackText: nativeRes.message,
+        };
+      }
+
+      case 'home': {
+        const navRes = executeNativeNavigation('home');
+        return {
+          handled: true,
+          actionLabel: 'Tela Inicial',
+          executedVia: navRes.isNative ? 'android_intent' : 'internal_action',
+          openedExternalApp: false,
+          feedbackText: navRes.message,
+        };
+      }
+
+      case 'back': {
+        const navRes = executeNativeNavigation('back');
+        return {
+          handled: true,
+          actionLabel: 'Voltar',
+          executedVia: navRes.isNative ? 'android_intent' : 'internal_action',
+          openedExternalApp: false,
+          feedbackText: navRes.message,
+        };
+      }
+
+      case 'notifications': {
+        const notifRes = readLatestNotifications();
+        return {
+          handled: true,
+          actionLabel: 'Notificações',
+          executedVia: notifRes.isNative ? 'android_intent' : 'internal_action',
+          openedExternalApp: false,
+          feedbackText: notifRes.message,
+        };
+      }
+
+      case 'click_text': {
+        const clickRes = executeAccessibilityClick(cleanParam);
+        return {
+          handled: true,
+          actionLabel: 'Acessibilidade / Clique',
+          executedVia: clickRes.isNative ? 'android_intent' : 'internal_action',
+          openedExternalApp: false,
+          feedbackText: clickRes.message,
+        };
+      }
+
       default:
         return {
           handled: false,
@@ -436,7 +554,99 @@ export function parseAutomationVoiceCommand(rawText: string): {
     };
   }
 
-  // 7. Compartilhar
+  // 7. YouTube
+  if (
+    text.includes('abrir youtube') ||
+    text.includes('abre o youtube') ||
+    text.includes('iniciar youtube') ||
+    text === 'youtube'
+  ) {
+    return {
+      isAutomation: true,
+      actionId: 'youtube',
+      param: '',
+    };
+  }
+
+  // 8. Definições / Configurações do Android
+  if (
+    text.includes('abrir definições') ||
+    text.includes('abre as definições') ||
+    text.includes('abrir configurações') ||
+    text.includes('abre as configurações') ||
+    text.includes('abrir ajustes') ||
+    text === 'definições' ||
+    text === 'configurações'
+  ) {
+    return {
+      isAutomation: true,
+      actionId: 'settings',
+      param: '',
+    };
+  }
+
+  // 9. Navegação: Tela Inicial / Ecrã Inicial
+  if (
+    text.includes('ecrã inicial') ||
+    text.includes('tela inicial') ||
+    text.includes('ir para o início') ||
+    text.includes('ir para o inicio') ||
+    text.includes('vai para o ecrã inicial') ||
+    text.includes('vai para a tela inicial') ||
+    text === 'início' ||
+    text === 'inicio' ||
+    text === 'home'
+  ) {
+    return {
+      isAutomation: true,
+      actionId: 'home',
+      param: '',
+    };
+  }
+
+  // 10. Navegação: Voltar
+  if (
+    text === 'volta' ||
+    text === 'voltar' ||
+    text === 'retroceder' ||
+    text.includes('voltar tela') ||
+    text.includes('tela anterior')
+  ) {
+    return {
+      isAutomation: true,
+      actionId: 'back',
+      param: '',
+    };
+  }
+
+  // 11. Ler Notificações
+  if (
+    text.includes('leia minhas notificações') ||
+    text.includes('ler notificações') ||
+    text.includes('ler notificacoes') ||
+    text.includes('minhas notificações') ||
+    text.includes('quais são as notificações') ||
+    text === 'notificações' ||
+    text === 'notificacoes'
+  ) {
+    return {
+      isAutomation: true,
+      actionId: 'notifications',
+      param: '',
+    };
+  }
+
+  // 12. Acessibilidade: Clique por Voz
+  const clickMatch = text.match(/^(?:clica\s+em|clicar\s+em|pressione|tocar\s+em|selecionar)\s+(.*)$/i);
+  if (clickMatch && clickMatch[1].trim()) {
+    return {
+      isAutomation: true,
+      actionId: 'click_text',
+      param: clickMatch[1].trim(),
+    };
+  }
+
+  // 13. Compartilhar
   if (text === 'compartilhar' || text === 'compartilhar link' || text === 'compartilhar tela') {
     return {
       isAutomation: true,
